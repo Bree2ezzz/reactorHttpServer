@@ -17,6 +17,7 @@ TcpSever::TcpSever(unsigned short port, int threadNum)
     port_ = port;
     threadNum_ = threadNum;
     mainLoop_ = std::make_shared<EventLoop>();
+    mainLoop_->initWakeupChannel();
     threadPool_ = std::make_shared<ThreadPool>(mainLoop_,threadNum);
 }
 
@@ -24,7 +25,6 @@ int TcpSever::readCallback()
 {
     socket_t cfd = accept(lfd_,NULL,NULL);
     std::shared_ptr<EventLoop> evLoop = threadPool_->takeWorkerEventLoop();
-    //这里是tcpConnection，暂未实现
     std::shared_ptr<TcpConnection> conn = std::make_shared<TcpConnection>(cfd,evLoop);
     conn->init();
     return 0;

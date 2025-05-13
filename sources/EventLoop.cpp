@@ -6,6 +6,9 @@
 
 #include "../headers/Dispatcher.h"
 #include <cassert>
+
+#include "../headers/EpollDispatcher.h"
+
 EventLoop::EventLoop() : EventLoop(std::string())
 {
 
@@ -14,7 +17,7 @@ EventLoop::EventLoop() : EventLoop(std::string())
 EventLoop::EventLoop(const std::string& threadName) : isQuit(true),wakeupFdRead_(-1),wakeupFdWrite_(-1)
 {
     threadId_ = std::this_thread::get_id();
-    // dispatcher_ = new EpollDispatcher;暂未实现
+    dispatcher_ = std::make_shared<EpollDispatcher>();
     threadName_ = threadName.empty() ? "MainThread" : threadName;
     channelMap_.clear();
     createSocketPair(wakeupFdRead_,wakeupFdWrite_);
