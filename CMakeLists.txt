@@ -3,13 +3,9 @@ project(reactorHttp)
 
 set(SPDLOG_HEADER_ONLY ON)
 include(FetchContent)
-FetchContent_Declare(
-  spdlog
-  GIT_REPOSITORY https://github.com/gabime/spdlog.git
-  GIT_TAG        v1.13.0
-)
 
-FetchContent_MakeAvailable(spdlog)
+add_subdirectory(third_party/spdlog)
+
 set(CMAKE_CXX_STANDARD 17)
 
 #公共源文件
