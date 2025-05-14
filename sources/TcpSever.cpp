@@ -17,6 +17,7 @@ TcpSever::TcpSever(unsigned short port, int threadNum)
     port_ = port;
     threadNum_ = threadNum;
     mainLoop_ = std::make_shared<EventLoop>();
+    mainLoop_->init();
     mainLoop_->initWakeupChannel();
     threadPool_ = std::make_shared<ThreadPool>(mainLoop_,threadNum);
 }

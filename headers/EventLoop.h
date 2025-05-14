@@ -25,6 +25,7 @@ public:
     EventLoop();
     EventLoop(const std::string& threadName);
     ~EventLoop() = default;
+    void init();//初始化 主要是为了构造Dispatcher
     bool createSocketPair(socket_t& readFd,socket_t& writeFD);
     int writeCallback() override;
     int readCallback() override;

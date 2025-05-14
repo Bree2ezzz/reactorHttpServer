@@ -21,7 +21,7 @@ public:
     /*channel是封装文件描述符，evLoop是一个事件循环，channel每次调用时可能是不一样的，evLoop是专属于某个线程的，不会改变
      */
     std::shared_ptr<Channel> channel_;
-    std::shared_ptr<EventLoop> evLoop_;
+    std::weak_ptr<EventLoop> evLoop_;
 };
 
 

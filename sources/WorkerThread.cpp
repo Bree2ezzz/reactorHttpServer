@@ -18,6 +18,7 @@ void WorkerThread::run()
         {
             std::lock_guard<std::mutex> mtx(threadMutex_);
             evLoop_ = std::make_shared<EventLoop>(threadName_);
+            evLoop_->init();
         }
         threadCond_.notify_one();
         evLoop_->run();

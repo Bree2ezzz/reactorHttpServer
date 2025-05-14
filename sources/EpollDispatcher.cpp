@@ -53,7 +53,14 @@ int EpollDispatcher::modify()
 
 int EpollDispatcher::dispatch(int timeout)
 {
-    int count = epoll_wait(epfd_,events_.get(),maxNode_,timeout * 1000);
+    int count = epoll_wait(epfd_, events_.get(), maxNode_, timeout * 1000);
+    // 获取 shared_ptr
+    auto evLoopShared = evLoop_.lock();
+    if (!evLoopShared) {
+        // EventLoop 已被销毁，返回
+        return -1;
+    }
+    
     for(int i = 0; i < count; ++i)
     {
         auto events = events_[i].events;
@@ -64,11 +71,11 @@ int EpollDispatcher::dispatch(int timeout)
         }
         if (events & EPOLLIN)
         {
-            evLoop_->eventActive(fd, (int)FDEvent::ReadEvent);
+            evLoopShared->eventActive(fd, (int)FDEvent::ReadEvent);
         }
         if (events & EPOLLOUT)
         {
-            evLoop_->eventActive(fd, (int)FDEvent::WriteEvent);
+            evLoopShared->eventActive(fd, (int)FDEvent::WriteEvent);
         }
     }
     return 0;
