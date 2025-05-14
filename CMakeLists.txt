@@ -1,6 +1,15 @@
 cmake_minimum_required(VERSION 3.28)
 project(reactorHttp)
 
+set(SPDLOG_HEADER_ONLY ON)
+include(FetchContent)
+FetchContent_Declare(
+  spdlog
+  GIT_REPOSITORY https://github.com/gabime/spdlog.git
+  GIT_TAG        v1.13.0
+)
+
+FetchContent_MakeAvailable(spdlog)
 set(CMAKE_CXX_STANDARD 17)
 
 #公共源文件
@@ -27,6 +36,7 @@ set(PUBLIC_SOURCES main.cpp
         headers/HttpResponse.h
         sources/TcpConnection.cpp
         headers/TcpConnection.h)
+
 #if(WIN32)
 #{
 #    list(APPEND SOURCES)
@@ -37,6 +47,7 @@ set(PUBLIC_SOURCES main.cpp
 #}
 #endif
 add_executable(${PROJECT_NAME} ${PUBLIC_SOURCES})
+target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog_header_only)
 if(WIN32)
 target_link_libraries(${PROJECT_NAME} PRIVATE ws2_32)
 endif()

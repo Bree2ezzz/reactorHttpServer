@@ -152,6 +152,7 @@ bool HttpRequest::parseRequest(std::shared_ptr<Buffer> readBuf, std::shared_ptr<
         }
         return false;
     }
+    return false;//如果根本没有进入while循环，就返回false
 }
 
 bool HttpRequest::processRequest(std::shared_ptr<HttpResponse> response)
@@ -196,13 +197,14 @@ bool HttpRequest::processRequest(std::shared_ptr<HttpResponse> response)
         response->addHeader("Content-type", getFileType(file));
         response->addHeader("Content-length", std::to_string(fileSize));
         response->sendDataFunc = sendFile;
-
+        return true;
 
     } catch (const std::filesystem::filesystem_error& e) {
         // 文件系统错误处理
         //暂未实现
         return false;
     }
+    return false;
 }
 
 std::string HttpRequest::getFileType(const std::string& name)
