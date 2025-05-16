@@ -8,7 +8,7 @@
 #include <cassert>
 
 #include "../headers/EpollDispatcher.h"
-
+#include <spdlog/spdlog.h>
 EventLoop::EventLoop() : EventLoop(std::string())
 {
 
@@ -24,9 +24,15 @@ EventLoop::EventLoop(const std::string& threadName) : isQuit(true),wakeupFdRead_
 
 void EventLoop::init()
 {
-    dispatcher_ = std::make_shared<EpollDispatcher>(shared_from_this());
+    try
+    {
+        dispatcher_ = std::make_shared<EpollDispatcher>(shared_from_this());
+    }
+    catch(const std::exception& e)
+    {
+        SPDLOG_ERROR("init dispatcher failed:{}",e.what());
+    }
 }
-
 bool EventLoop::createSocketPair(socket_t &readFd, socket_t &writeFd)
 {
 #ifdef _WIN32
@@ -103,8 +109,8 @@ int EventLoop::readCallback()
 
 int EventLoop::addTask(std::shared_ptr<Channel> channel, ElemType type)
 {
-    std::lock_guard<std::mutex>mtx(eventLoopMutex_);
     {
+        std::lock_guard<std::mutex>mtx(eventLoopMutex_);
         std::shared_ptr<ChannelElement> element = std::make_shared<ChannelElement>();
         element->type = type;
         element->channel = channel;
@@ -113,11 +119,13 @@ int EventLoop::addTask(std::shared_ptr<Channel> channel, ElemType type)
     if(threadId_ == std::this_thread::get_id())
     {
         //处理任务
+        SPDLOG_INFO("处理任务");
         processTaskQ();
     }
     else
     {
         //主线程派发任务 需要唤醒线程
+        SPDLOG_INFO("主线程派发任务 需要唤醒线程");
         taskWakeUp();
     }
     return 0;
@@ -138,6 +146,7 @@ void EventLoop::taskWakeUp()
 
 int EventLoop::processTaskQ()
 {
+    SPDLOG_INFO("begin processTaskQ");
     while(!taskQueue_.empty())
     {
         std::shared_ptr<ChannelElement> node;
@@ -149,14 +158,17 @@ int EventLoop::processTaskQ()
         std::shared_ptr<Channel> channel = node->channel;
         if(node->type == ElemType::ETADD)
         {
+            SPDLOG_INFO("begin addToMap");
             addToMap(channel);
         }
         else if(node->type == ElemType::ETDELETE)
         {
+            SPDLOG_INFO("begin deleteFromMap");
             deleteFromMap(channel);
         }
         else if(node->type == ElemType::ETMODIFY)
         {
+            SPDLOG_INFO("begin modifyMap");
             modifyMap(channel);
         }
     }
@@ -172,6 +184,7 @@ int EventLoop::addToMap(std::shared_ptr<Channel> channel)
         channelMap_.emplace(std::pair(fd,channel));
         dispatcher_->setChannel(channel);
         int ret = dispatcher_->add();
+        SPDLOG_INFO("addToMap success");
         return ret;
     }
     return -1;

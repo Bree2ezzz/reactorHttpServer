@@ -1,0 +1,5 @@
+/home/roxy/tt/reactorHttpServer/reactorHttpServer/build/CMakeFiles/reactorHttp.dir
+/home/roxy/tt/reactorHttpServer/reactorHttpServer/build/CMakeFiles/edit_cache.dir
+/home/roxy/tt/reactorHttpServer/reactorHttpServer/build/CMakeFiles/rebuild_cache.dir
+/home/roxy/tt/reactorHttpServer/reactorHttpServer/build/third_party/spdlog/CMakeFiles/edit_cache.dir
+/home/roxy/tt/reactorHttpServer/reactorHttpServer/build/third_party/spdlog/CMakeFiles/rebuild_cache.dir

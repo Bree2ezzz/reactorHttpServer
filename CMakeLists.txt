@@ -1,12 +1,11 @@
 cmake_minimum_required(VERSION 3.28)
 project(reactorHttp)
+set(CMAKE_CXX_STANDARD 17)
 
 set(SPDLOG_HEADER_ONLY ON)
-include(FetchContent)
 
 add_subdirectory(third_party/spdlog)
 
-set(CMAKE_CXX_STANDARD 17)
 
 #公共源文件
 set(PUBLIC_SOURCES main.cpp

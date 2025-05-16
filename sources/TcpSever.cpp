@@ -3,7 +3,7 @@
 //
 
 #include "../headers/TcpSever.h"
-
+#include <spdlog/spdlog.h>
 #include "../headers/TcpConnection.h"
 #ifdef _WIN32
 #include <winsock2.h>
@@ -16,10 +16,18 @@ TcpSever::TcpSever(unsigned short port, int threadNum)
 {
     port_ = port;
     threadNum_ = threadNum;
-    mainLoop_ = std::make_shared<EventLoop>();
-    mainLoop_->init();
-    mainLoop_->initWakeupChannel();
+    auto loop = std::make_shared<EventLoop>();
+    mainLoop_ = loop;
+    try{
+        mainLoop_->init();
+        mainLoop_->initWakeupChannel();
+    }
+    catch(const std::exception& e)
+    {
+        SPDLOG_ERROR("init mainLoop failed:{}",e.what());
+    }
     threadPool_ = std::make_shared<ThreadPool>(mainLoop_,threadNum);
+    SPDLOG_INFO("TcpSever init success");
 }
 
 int TcpSever::readCallback()

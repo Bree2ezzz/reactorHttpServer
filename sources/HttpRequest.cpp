@@ -11,6 +11,9 @@
 #include <iomanip>     // for std::put_time
 #include <fstream>
 #include <system_error>
+#include <spdlog/spdlog.h>
+#include <algorithm> // For std::min (already present, ensure it is, or add if not)
+#include <cstddef>   // For ptrdiff_t
 
 HttpRequest::HttpRequest()
 {
@@ -51,28 +54,51 @@ std::string HttpRequest::getHeader(const std::string key)
 bool HttpRequest::parseRequsetLine(std::shared_ptr<Buffer> buffer)
 {
     char* end = buffer->findCRLF();
-    if (end == nullptr) return false;
+    if (end == nullptr) 
+    {
+        // SPDLOG_DEBUG("parseRequsetLine: No CRLF found in buffer.");
+        return false;
+    }
     char* start = buffer->data() + buffer->readPos();
+    // SPDLOG_DEBUG("parseRequsetLine: start={}, end={}", std::string(start, std::min(static_cast<ptrdiff_t>(20), end-start)), std::string(end,2));
 
     //提取Method
     char* space = std::find(start, end, ' ');
-    if (space == end) return false;
+    if (space == end) 
+    {
+        SPDLOG_DEBUG("parseRequsetLine: No space found for METHOD.");
+        return false;
+    }
     method_.assign(start, space);
+    SPDLOG_DEBUG("parseRequsetLine: Method: {}", method_);
 
     //提取Url
     char* pathStart = space + 1;
+    if (pathStart >= end) // 检查 pathStart 是否越界
+    {
+        // SPDLOG_DEBUG("parseRequsetLine: pathStart is out of bounds after first space.");
+        return false;
+    }
     space = std::find(pathStart, end, ' ');
-    if (space == end) return false;
+    if (space == end) 
+    {
+        // SPDLOG_DEBUG("parseRequsetLine: No space found for URL.");
+        return false;
+    }
     url_.assign(pathStart, space);
 
     //提取Version
     char* versionStart = space + 1;
-    if (versionStart >= end) return false;
+    if (versionStart >= end) // 检查 versionStart 是否越界
+    {
+        SPDLOG_DEBUG("parseRequsetLine: versionStart is out of bounds after second space.");
+        return false;
+    }
     version_.assign(versionStart, end);
 
     buffer->removeOneLine();
     curState_ = ProcessState::ParseReHeaders;
-
+    SPDLOG_DEBUG("Exit parseRequsetLine: Success.");
     return true;
 
 }
@@ -82,6 +108,7 @@ bool HttpRequest::parseRequestHeader(std::shared_ptr<Buffer> buffer)
     char* crlf = buffer->findCRLF();
     if (crlf == nullptr)
     {
+        // SPDLOG_DEBUG("parseRequestHeader: No CRLF found in buffer.");
         return false;
     }
     char* lineStart = buffer->data() + buffer->readPos();
@@ -92,48 +119,65 @@ bool HttpRequest::parseRequestHeader(std::shared_ptr<Buffer> buffer)
         buffer->removeOneLine(); // 推进readPos_
         // 通知状态机转到下一阶段（比如解析请求体、生成响应）
         curState_ = ProcessState::ParseReDone;
+        SPDLOG_DEBUG("parseRequestHeader: Empty line found. Headers done.");
         return true;
     }
 
     char* colon = std::find(lineStart, crlf, ':');
-    if (colon == crlf)
+    if (colon == crlf || lineStart >= colon) // 检查是否有冒号，并且key不为空
     {
-        // 如果没有冒号，说明格式错误
+        SPDLOG_DEBUG("parseRequestHeader: No colon found, or key is empty.");
         return false;
     }
 
     std::string key(lineStart, colon);
-    std::string value(colon + 1, crlf);
+    char* valueStart = colon + 1;
+    // valueStart 不会大于 crlf，因为 colon < crlf。如果 colon + 1 == crlf，value 是空字符串，合法。
+    std::string value(valueStart, crlf);
+    
     // 去掉value前导空格
-    while (!value.empty() && (value[0] == ' ' || value[0] == '\t'))
+    size_t first_char = value.find_first_not_of(" \t");
+    if (std::string::npos == first_char)
     {
-        value.erase(0, 1);
+        value = ""; // 如果全是空格，则value为空
     }
+    else
+    {
+        value = value.substr(first_char);
+    }
+    // SPDLOG_DEBUG("parseRequestHeader: Key='{}', Value='{}'", key, value);
 
-    if (key == "Host")
-    {
-        headers_[key] = value;
-    }
-    else if (key == "Connection")
-    {
-        headers_[key] = value;
-    }
+    // if (key == "Host")
+    // {
+    //     headers_[key] = value;
+    // }
+    // else if (key == "Connection")
+    // {
+    //     headers_[key] = value;
+    // }
+    // // 其他头字段也可以类似添加，或者直接添加所有解析到的头字段
+    headers_[key] = value; // 直接添加，如果需要特定处理某些头，可以在此基础上修改
+
     buffer->removeOneLine(); // 这一行处理完了，推进readPos_
+    // SPDLOG_DEBUG("Exit parseRequestHeader: Success (processed one header line).");
     return true;
 }
 
 bool HttpRequest::parseRequest(std::shared_ptr<Buffer> readBuf, std::shared_ptr<HttpResponse> response,
     std::shared_ptr<Buffer> sendBuf, socket_t socket)
 {
+    SPDLOG_INFO("begin parseRequest");
     bool flag = true;
-    while(curState_ != ProcessState::ParseReDone)
+    while(flag)
     {
         switch (curState_)
         {
             case ProcessState::ParseReline:
+                SPDLOG_INFO("begin parseRequsetLine");
                 flag = parseRequsetLine(readBuf);
                 break;
             case ProcessState::ParseReHeaders:
+                SPDLOG_INFO("begin parseRequestHeader");
                 flag = parseRequestHeader(readBuf);
                 break;;
             case ProcessState::ParseReBody:
@@ -145,12 +189,13 @@ bool HttpRequest::parseRequest(std::shared_ptr<Buffer> readBuf, std::shared_ptr<
         if(curState_ == ProcessState::ParseReDone)
         {
             //请求报文获取后，去处理这个请求
+            SPDLOG_INFO("begin processRequest");
             processRequest(response);
             //处理体内去组织数据
+            SPDLOG_INFO("begin prepareMsg");
             response->prepareMsg(sendBuf,socket);
             return true;
         }
-        return false;
     }
     return false;//如果根本没有进入while循环，就返回false
 }
@@ -184,7 +229,7 @@ bool HttpRequest::processRequest(std::shared_ptr<HttpResponse> response)
         }
         response->setFileName(file);
         response->setStatuCode(StatusCode::OK);
-
+        SPDLOG_INFO("set StatusCode:OK");
         if (std::filesystem::is_directory(filePath)) {
             // 处理目录请求（如默认加载index.html）
             response->addHeader("Content-type", getFileType(".html"));
