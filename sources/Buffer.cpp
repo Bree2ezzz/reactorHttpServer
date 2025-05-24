@@ -31,7 +31,6 @@ int Buffer::sendData(socket_t socket)
         if(count > 0)
         {
             readPos_ += count;
-            usleep(1);
         }
         return count;
     }
