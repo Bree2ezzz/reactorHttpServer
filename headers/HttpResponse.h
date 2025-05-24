@@ -26,6 +26,7 @@ public:
     ~HttpResponse() = default;
     void addHeader(const std::string key,const std::string value);
     void prepareMsg(std::shared_ptr<Buffer> sendBuf, socket_t socket);
+    void reset();
     inline void setFileName(const char* fileName)
     {
         fileName_ = fileName;

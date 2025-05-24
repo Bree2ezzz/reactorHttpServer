@@ -145,17 +145,6 @@ bool HttpRequest::parseRequestHeader(std::shared_ptr<Buffer> buffer)
     {
         value = value.substr(first_char);
     }
-    // SPDLOG_DEBUG("parseRequestHeader: Key='{}', Value='{}'", key, value);
-
-    // if (key == "Host")
-    // {
-    //     headers_[key] = value;
-    // }
-    // else if (key == "Connection")
-    // {
-    //     headers_[key] = value;
-    // }
-    // // 其他头字段也可以类似添加，或者直接添加所有解析到的头字段
     headers_[key] = value; // 直接添加，如果需要特定处理某些头，可以在此基础上修改
 
     buffer->removeOneLine(); // 这一行处理完了，推进readPos_
@@ -202,11 +191,54 @@ bool HttpRequest::parseRequest(std::shared_ptr<Buffer> readBuf, std::shared_ptr<
 
 bool HttpRequest::processRequest(std::shared_ptr<HttpResponse> response)
 {
-    if(method_ != "get")
+    if(method_ != "GET")
     {
         return false;
     }
+    // 解码URL
     url_ = decodeMsg(url_);
+    
+    // 处理URL中的".."返回上一级目录
+    if (url_.find("..") != std::string::npos) {
+        // 对于包含".."的URL，我们需要特殊处理
+        SPDLOG_INFO("处理包含'..'的URL: {}", url_);
+        
+        try {
+            // 转换为文件系统路径并处理
+            std::string path = url_.substr(1);  // 去掉开头的'/'
+            if (path.empty()) path = ".";
+            
+            // 处理相对路径
+            std::filesystem::path requestPath(path);
+            
+            // 使用std::filesystem来解析路径
+            std::filesystem::path resolvedPath;
+            if (requestPath.is_absolute()) {
+                // 安全检查：确保不会访问根目录以外的内容
+                resolvedPath = requestPath;
+            } else {
+                // 相对路径：从当前工作目录解析
+                resolvedPath = std::filesystem::weakly_canonical("." / requestPath);
+            }
+            
+            // 将解析后的路径转换回URL格式
+            std::string newUrl = "/" + resolvedPath.relative_path().string();
+            if (newUrl.empty()) newUrl = "/";
+            
+            SPDLOG_INFO("解析后的URL: {}", newUrl);
+            url_ = newUrl;
+        } catch (const std::filesystem::filesystem_error& e) {
+            // 路径解析错误，返回404
+            SPDLOG_ERROR("路径解析错误: {}", e.what());
+            response->setFileName("404.html");
+            response->setStatuCode(StatusCode::NotFound);
+            response->addHeader("Content-type", getFileType(".html"));
+            response->sendDataFunc = sendFile;
+            return true;
+        }
+    }
+    
+    // 转换URL到文件路径
     const char* file = nullptr;
     if(url_ == "/")
     {
@@ -216,6 +248,10 @@ bool HttpRequest::processRequest(std::shared_ptr<HttpResponse> response)
     {
         file = url_.data() + 1;//去掉前面的/，让本机认为是相对路径
     }
+    
+    // 记录请求的文件路径，便于调试
+    SPDLOG_INFO("请求文件路径: {}", file);
+    
     std::filesystem::path filePath(file);
     try {
         // 跨平台的文件状态检查
@@ -223,30 +259,39 @@ bool HttpRequest::processRequest(std::shared_ptr<HttpResponse> response)
             // 文件不存在 -- 回复404
             response->setFileName("404.html");
             response->setStatuCode(StatusCode::NotFound);
-            response->addHeader("Content-type",getFileType(".html"));
+            response->addHeader("Content-type", getFileType(".html"));
             response->sendDataFunc = sendFile;
+            SPDLOG_WARN("文件不存在: {}", file);
             return true;
         }
+        
+        // 设置要处理的文件名
         response->setFileName(file);
         response->setStatuCode(StatusCode::OK);
-        SPDLOG_INFO("set StatusCode:OK");
+        SPDLOG_INFO("设置状态码: OK, 文件名: {}", file);
+        
         if (std::filesystem::is_directory(filePath)) {
-            // 处理目录请求（如默认加载index.html）
+            // 处理目录请求
+            SPDLOG_INFO("处理目录请求: {}", file);
             response->addHeader("Content-type", getFileType(".html"));
             response->sendDataFunc = sendDir;
             return true;
         }
 
-        //这里是文件类型处理
-        auto fileSize = std::filesystem::file_size(filePath); // 获取文件大小
-        response->addHeader("Content-type", getFileType(file));
+        // 处理文件请求 - 强制下载
+        SPDLOG_INFO("处理文件请求: {}", file);
+        auto fileSize = std::filesystem::file_size(filePath);
+        response->addHeader("Content-type", "application/octet-stream"); // 强制所有文件都用二进制流处理，浏览器会下载
         response->addHeader("Content-length", std::to_string(fileSize));
+        // 添加Content-Disposition头，强制下载
+        std::string filename = std::filesystem::path(file).filename().string();
+        response->addHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
         response->sendDataFunc = sendFile;
         return true;
 
     } catch (const std::filesystem::filesystem_error& e) {
         // 文件系统错误处理
-        //暂未实现
+        SPDLOG_ERROR("文件系统错误: {}", e.what());
         return false;
     }
     return false;
@@ -303,14 +348,24 @@ void HttpRequest::sendDir(std::string dirName, std::shared_ptr<Buffer> sendBuf, 
 
     // 2. 添加父目录链接（如果不是根目录）
     if (dirName != "./" && dirName != "/") {
-        std::filesystem::path parentPath = std::filesystem::path(dirName).parent_path();
-        if (parentPath.empty()) parentPath = "./";
-
-        oss << R"(<tr><td><a href=")" << parentPath.string() << R"(/">..</a></td><td>-</td><td>-</td></tr>)";
+        // 最简单的方式：直接链接到".."
+        std::string currentPath = "/" + std::filesystem::path(dirName).string();
+        if (currentPath.back() != '/') {
+            currentPath += "/";
+        }
+        
+        // 上级目录的链接就是当前路径加上".."
+        oss << R"(<tr><td><a href=")" << currentPath << R"(../">..</a></td><td>-</td><td>-</td></tr>)";
     }
 
     // 3. 遍历目录项
     try {
+        // 获取当前目录的URL路径
+        std::string currentPath = "/" + std::filesystem::path(dirName).string();
+        if (currentPath.back() != '/') {
+            currentPath += "/";
+        }
+        
         for (const auto& entry : std::filesystem::directory_iterator(dirName)) {
             const auto& path = entry.path();
             std::string filename = path.filename().string();
@@ -334,7 +389,11 @@ void HttpRequest::sendDir(std::string dirName, std::shared_ptr<Buffer> sendBuf, 
             std::strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%d %H:%M:%S", &tm);
             // 生成表格行
             if (entry.is_directory()) {
-                oss << R"(<tr><td><a href=")" << filename << R"(/">)" << filename << R"(/</a></td><td>-</td><td>)"
+                // 简单地使用文件名，确保URL格式正确
+                std::string dirName = filename;
+                std::string dirUrl = currentPath + dirName + "/";
+                
+                oss << R"(<tr><td><a href=")" << dirUrl << R"(">)" << dirName << R"(/</a></td><td>-</td><td>)"
                     << timeBuf << R"(</td></tr>)";
             } else {
                 // 格式化文件大小
@@ -348,7 +407,10 @@ void HttpRequest::sendDir(std::string dirName, std::shared_ptr<Buffer> sendBuf, 
                     sizeStr = std::to_string(size / (1024 * 1024)) + " MB";
                 }
 
-                oss << R"(<tr><td><a href=")" << filename << R"(">)" << filename << R"(</a></td><td>)"
+                // 简单地使用文件名
+                std::string fileUrl = currentPath + filename;
+                
+                oss << R"(<tr><td><a href=")" << fileUrl << R"(">)" << filename << R"(</a></td><td>)"
                     << sizeStr << R"(</td><td>)" << timeBuf << R"(</td></tr>)";
             }
         }
@@ -370,6 +432,8 @@ void HttpRequest::sendDir(std::string dirName, std::shared_ptr<Buffer> sendBuf, 
 
 void HttpRequest::sendFile(std::string fileName, std::shared_ptr<Buffer> sendBuf, socket_t cfd)
 {
+    // 我们无法直接清空缓冲区，但确保每次发送后数据都被完全处理
+    
     std::ifstream file(fileName, std::ios::binary); // 二进制打开
     if (!file.is_open())
     {
@@ -387,10 +451,17 @@ void HttpRequest::sendFile(std::string fileName, std::shared_ptr<Buffer> sendBuf
         if (bytesRead > 0)
         {
             sendBuf->appendString(buffer.data(), static_cast<int>(bytesRead));
-            sendBuf->sendData(cfd);
+            // 确保完全发送
+            while(sendBuf->readableSize() > 0) {
+                int sent = sendBuf->sendData(cfd);
+                if (sent <= 0) {
+                    // 发送失败，连接可能已断开
+                    break;
+                }
+            }
         }
     }
-
+    file.close();
 }
 
 std::string HttpRequest::decodeMsg(const std::string& from)

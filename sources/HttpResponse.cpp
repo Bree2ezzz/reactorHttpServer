@@ -35,5 +35,11 @@ void HttpResponse::prepareMsg(std::shared_ptr<Buffer> sendBuf, socket_t socket)
     sendDataFunc(fileName_.c_str(),sendBuf,socket);
 }
 
-
+void HttpResponse::reset()
+{
+    statusCode_ = StatusCode::Unknown;
+    headers_.clear();
+    fileName_.clear();
+    sendDataFunc = nullptr;
+}
 

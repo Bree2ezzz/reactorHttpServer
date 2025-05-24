@@ -159,5 +159,10 @@ void Buffer::removeOneLine()
     }
 }
 
+void Buffer::reset()
+{
+    readPos_ = 0;
+    writePos_ = 0;
+}
 
 

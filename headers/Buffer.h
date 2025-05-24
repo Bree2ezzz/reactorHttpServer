@@ -31,6 +31,7 @@ public:
     int socketRead(socket_t fd);
     char* data();
     void removeOneLine();
+    void reset();
     inline int readPos()
     {
         return readPos_;

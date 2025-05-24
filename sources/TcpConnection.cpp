@@ -9,8 +9,8 @@ TcpConnection::TcpConnection(socket_t fd, std::shared_ptr<EventLoop> evLoop)
     evLoop_ = evLoop;
     readBuf_ = std::make_shared<Buffer>(10240);
     writeBuf_ = std::make_shared<Buffer>(10240);
-    request_ = std::shared_ptr<HttpRequest>();
-    response_ = std::shared_ptr<HttpResponse>();
+    request_ = std::make_shared<HttpRequest>();
+    response_ = std::make_shared<HttpResponse>();
     name_ = "Connection-" + std::to_string(fd);
     fd_ = fd;
 }
@@ -41,6 +41,9 @@ int TcpConnection::readCallback()
     int count = readBuf_->socketRead(socket);
     if(count > 0)
     {
+        request_->reset();
+        response_->reset();
+        
         bool flag = request_->parseRequest(readBuf_,response_,writeBuf_,socket);
         if(!flag)
         {
