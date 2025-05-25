@@ -66,11 +66,11 @@ bool HttpRequest::parseRequsetLine(std::shared_ptr<Buffer> buffer)
     char* space = std::find(start, end, ' ');
     if (space == end) 
     {
-        SPDLOG_DEBUG("parseRequsetLine: No space found for METHOD.");
+        SPDLOG_INFO("parseRequsetLine: No space found for METHOD.");
         return false;
     }
     method_.assign(start, space);
-    SPDLOG_DEBUG("parseRequsetLine: Method: {}", method_);
+    SPDLOG_INFO("parseRequsetLine: Method: {}", method_);
 
     //提取Url
     char* pathStart = space + 1;
@@ -91,14 +91,14 @@ bool HttpRequest::parseRequsetLine(std::shared_ptr<Buffer> buffer)
     char* versionStart = space + 1;
     if (versionStart >= end) // 检查 versionStart 是否越界
     {
-        SPDLOG_DEBUG("parseRequsetLine: versionStart is out of bounds after second space.");
+        SPDLOG_INFO("parseRequsetLine: versionStart is out of bounds after second space.");
         return false;
     }
     version_.assign(versionStart, end);
 
     buffer->removeOneLine();
     curState_ = ProcessState::ParseReHeaders;
-    SPDLOG_DEBUG("Exit parseRequsetLine: Success.");
+    SPDLOG_INFO("Exit parseRequsetLine: Success.");
     return true;
 
 }
@@ -119,14 +119,14 @@ bool HttpRequest::parseRequestHeader(std::shared_ptr<Buffer> buffer)
         buffer->removeOneLine(); // 推进readPos_
         // 通知状态机转到下一阶段（比如解析请求体、生成响应）
         curState_ = ProcessState::ParseReDone;
-        SPDLOG_DEBUG("parseRequestHeader: Empty line found. Headers done.");
+        SPDLOG_INFO("parseRequestHeader: Empty line found. Headers done.");
         return true;
     }
 
     char* colon = std::find(lineStart, crlf, ':');
     if (colon == crlf || lineStart >= colon) // 检查是否有冒号，并且key不为空
     {
-        SPDLOG_DEBUG("parseRequestHeader: No colon found, or key is empty.");
+        SPDLOG_INFO("parseRequestHeader: No colon found, or key is empty.");
         return false;
     }
 
@@ -432,7 +432,8 @@ void HttpRequest::sendDir(std::string dirName, std::shared_ptr<Buffer> sendBuf, 
 
 void HttpRequest::sendFile(std::string fileName, std::shared_ptr<Buffer> sendBuf, socket_t cfd)
 {
-    // 我们无法直接清空缓冲区，但确保每次发送后数据都被完全处理
+    // 重置缓冲区，准备发送新文件
+    sendBuf->reset();
     
     std::ifstream file(fileName, std::ios::binary); // 二进制打开
     if (!file.is_open())
@@ -444,24 +445,41 @@ void HttpRequest::sendFile(std::string fileName, std::shared_ptr<Buffer> sendBuf
     constexpr size_t bufSize = 8192;
     std::vector<char> buffer(bufSize);
 
-    while (file)
+    bool fileEnd = false;
+    while (!fileEnd)
     {
+        // 读取文件数据
         file.read(buffer.data(), bufSize);
         std::streamsize bytesRead = file.gcount();
+        
+        // 检查是否到达文件末尾
+        fileEnd = file.eof();
+        
         if (bytesRead > 0)
         {
+            // 添加数据到发送缓冲区
             sendBuf->appendString(buffer.data(), static_cast<int>(bytesRead));
-            // 确保完全发送
-            while(sendBuf->readableSize() > 0) {
+            
+            // 确保完全发送当前缓冲区数据
+            int remainingBytes = sendBuf->readableSize();
+            while (remainingBytes > 0)
+            {
                 int sent = sendBuf->sendData(cfd);
-                if (sent <= 0) {
-                    // 发送失败，连接可能已断开
-                    break;
+                if (sent <= 0)
+                {
+                    // 发送失败，可能是连接断开
+                    SPDLOG_ERROR("发送文件数据失败: {}", fileName);
+                    file.close();
+                    return;
                 }
+                remainingBytes = sendBuf->readableSize();
             }
         }
     }
+    
+    // 确保文件被关闭
     file.close();
+    SPDLOG_INFO("文件发送完成: {}", fileName);
 }
 
 std::string HttpRequest::decodeMsg(const std::string& from)

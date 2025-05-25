@@ -26,11 +26,26 @@ int Buffer::sendData(socket_t socket)
 #ifdef _WIN32
         int count = send(socket, data_ + readPos_, readableSize(), 0);
 #else
+        // 发送数据，使用MSG_NOSIGNAL避免SIGPIPE信号
         int count = send(socket, data_ + readPos_, readableSize(), MSG_NOSIGNAL);
 #endif
         if(count > 0)
         {
             readPos_ += count;
+            // 如果还有数据未发送完，记录日志
+            if (readableSize() > 0) {
+                SPDLOG_INFO("数据未完全发送，剩余字节: {}", readableSize());
+            }
+        }
+        else if (count == 0)
+        {
+            // 连接可能已关闭
+            SPDLOG_INFO("发送0字节，连接可能已关闭");
+        }
+        else
+        {
+            // 发送错误
+            SPDLOG_ERROR("发送数据错误: {}", strerror(errno));
         }
         return count;
     }
@@ -54,59 +69,46 @@ void Buffer::externRoom(int size)
     int readable = readableSize();        // 当前未读数据量
     int writable = writeableSize();       // 当前可写空间
     int front_space = readPos_;           // 前面被读掉的空间
-    if (writable >= (int)size) {
-        // 当前空间够写，不需要处理
+    
+    // 如果当前可写空间足够，直接返回
+    if (writable >= size) {
         return;
     }
-    if (writable >= (int)size) {
-        // 当前空间够写，不需要处理
-        return;
-    }
-
-    if (front_space + writable >= (int)size) {
-        // 通过数据搬移复用前面的空间
+    
+    // 通过数据搬移复用前面的空间
+    if (front_space + writable >= size) {
         memmove(data_, data_ + readPos_, readable);
         readPos_ = 0;
         writePos_ = readable;
         return;
     }
 
-    // 都不够：扩容
+    // 需要扩容：简单直观的策略 - 翻倍扩容直到满足需求
     int newCap = capacity_;
-    // 当前可读数据量 + 需要的额外空间 size，才是扩容后至少需要的总空间
-    // 确保 newCap 至少是当前容量加上额外需要的 size，或者至少是当前可读数据 + size
-    // 一个更安全的扩容逻辑：
-    int required_total_space = readable + size; // 需要的总空间
-    // 如果当前容量减去已读数据后，剩余空间不足以放下新数据，则需要扩容
-    // 或者更直接地，如果总容量不足以容纳 (已有的可读数据 + 新来的数据)
-    if (capacity_ < required_total_space) { // 如果当前总容量 < (已有的数据 + 新数据)
-        while (newCap < required_total_space) { // 确保新容量足够大
-            newCap = (newCap == 0) ? std::max(128, required_total_space) : (newCap * 2);
-        }
-    } else if (capacity_ - writePos_ + readPos_ < size) { // 即使总容量够，但如果把数据移到前面后，尾部剩余空间还是不够size，也需要扩容
-        // (capacity_ - writePos_) 是尾部空闲，readPos_ 是头部空闲
-        // (capacity_ - writePos_ + readPos_) 是总空闲空间
-        // 如果总空闲空间还是不够，也需要扩容到 required_total_space
-         while (newCap < required_total_space) {
-            newCap = (newCap == 0) ? std::max(128, required_total_space) : (newCap * 2);
-        }
+    int required_total_space = readable + size;
+    
+    // 确保新容量足够大
+    while (newCap < required_total_space) {
+        newCap = (newCap == 0) ? 1024 : newCap * 2;  // 从1KB开始，每次翻倍
     }
 
-
+    // 分配新内存并复制数据
     char* newData = (char*)malloc(newCap);
     if (!newData) {
         SPDLOG_ERROR("Failed to allocate memory in Buffer::externRoom with malloc");
-        // 最好抛出异常或采取更激烈的错误处理
-        return; // 简单的返回可能隐藏问题
+        return;
     }
+    
+    // 只复制有效数据
     if (readable > 0) {
         memcpy(newData, data_ + readPos_, readable);
     }
-    free(data_); // 释放旧内存
+    
+    free(data_);
     data_ = newData;
     capacity_ = newCap;
-    readPos_ = 0;       // 重置 readPos_
-    writePos_ = readable; // writePos_ 是已拷贝的数据量
+    readPos_ = 0;
+    writePos_ = readable;
 }
 
 int Buffer::appendString(const char *data, int size)
