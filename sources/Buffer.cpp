@@ -6,7 +6,7 @@
 #include <spdlog/spdlog.h>
 #include <cstdlib>
 #include <string.h>
-#include <algorithm> // For std::max
+#include <algorithm>
 
 Buffer::Buffer(int size) : capacity_(size),readPos_(0),writePos_(0)
 {
@@ -34,18 +34,18 @@ int Buffer::sendData(socket_t socket)
             readPos_ += count;
             // 如果还有数据未发送完，记录日志
             if (readableSize() > 0) {
-                SPDLOG_INFO("数据未完全发送，剩余字节: {}", readableSize());
+                SPDLOG_INFO("data not fully sent,remaining bytes: {}", readableSize());
             }
         }
         else if (count == 0)
         {
             // 连接可能已关闭
-            SPDLOG_INFO("发送0字节，连接可能已关闭");
+            SPDLOG_INFO("send 0 bytes,connection may be closed");
         }
         else
         {
             // 发送错误
-            SPDLOG_ERROR("发送数据错误: {}", strerror(errno));
+            SPDLOG_ERROR("send data error: {}", strerror(errno));
         }
         return count;
     }
@@ -156,7 +156,7 @@ void Buffer::removeOneLine()
     } else {
         // 若未找到换行，不做推进（防止越界）
         // 可加日志帮助调试：
-        SPDLOG_WARN("removeOneLine(): 未找到 \\r\\n，跳过失败");
+        SPDLOG_WARN("removeOneLine(): does not find \\r\\n,Skip one line error");
     }
 }
 
@@ -164,6 +164,27 @@ void Buffer::reset()
 {
     readPos_ = 0;
     writePos_ = 0;
+}
+
+// IOCP相关方法实现
+int Buffer::readData(socket_t fd)
+{
+    return socketRead(fd);
+}
+
+void Buffer::retrieve(int len)
+{
+    if (len <= 0) return;
+    if (len >= readableSize()) {
+        reset();
+    } else {
+        readPos_ += len;
+    }
+}
+
+void Buffer::appendData(const char* data, int len)
+{
+    appendString(data, len);
 }
 
 

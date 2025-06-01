@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/tmp/tmp.pCzmPfrlRM/cmake-build-debug/_deps/spdlog-subbuild/CMakeFiles/spdlog-populate"
+		},
+		{
+			"file" : "/tmp/tmp.pCzmPfrlRM/cmake-build-debug/_deps/spdlog-subbuild/CMakeFiles/spdlog-populate.rule"
+		},
+		{
+			"file" : "/tmp/tmp.pCzmPfrlRM/cmake-build-debug/_deps/spdlog-subbuild/CMakeFiles/spdlog-populate-complete.rule"
+		},
+		{
+			"file" : "/tmp/tmp.pCzmPfrlRM/cmake-build-debug/_deps/spdlog-subbuild/spdlog-populate-prefix/src/spdlog-populate-stamp/spdlog-populate-build.rule"
+		},
+		{
+			"file" : "/tmp/tmp.pCzmPfrlRM/cmake-build-debug/_deps/spdlog-subbuild/spdlog-populate-prefix/src/spdlog-populate-stamp/spdlog-populate-configure.rule"
+		},
+		{
+			"file" : "/tmp/tmp.pCzmPfrlRM/cmake-build-debug/_deps/spdlog-subbuild/spdlog-populate-prefix/src/spdlog-populate-stamp/spdlog-populate-download.rule"
+		},
+		{
+			"file" : "/tmp/tmp.pCzmPfrlRM/cmake-build-debug/_deps/spdlog-subbuild/spdlog-populate-prefix/src/spdlog-populate-stamp/spdlog-populate-install.rule"
+		},
+		{
+			"file" : "/tmp/tmp.pCzmPfrlRM/cmake-build-debug/_deps/spdlog-subbuild/spdlog-populate-prefix/src/spdlog-populate-stamp/spdlog-populate-mkdir.rule"
+		},
+		{
+			"file" : "/tmp/tmp.pCzmPfrlRM/cmake-build-debug/_deps/spdlog-subbuild/spdlog-populate-prefix/src/spdlog-populate-stamp/spdlog-populate-patch.rule"
+		},
+		{
+			"file" : "/tmp/tmp.pCzmPfrlRM/cmake-build-debug/_deps/spdlog-subbuild/spdlog-populate-prefix/src/spdlog-populate-stamp/spdlog-populate-test.rule"
+		},
+		{
+			"file" : "/tmp/tmp.pCzmPfrlRM/cmake-build-debug/_deps/spdlog-subbuild/spdlog-populate-prefix/src/spdlog-populate-stamp/spdlog-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"spdlog-populate"
+		],
+		"name" : "spdlog-populate"
+	}
+}

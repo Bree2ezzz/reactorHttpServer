@@ -3,9 +3,9 @@ project(reactorHttp)
 set(CMAKE_CXX_STANDARD 17)
 
 # 设置编译优化选项
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+# set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 # 开启链接时优化（LTO）
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+# set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 # 如果支持，开启更现代的CPU指令集
 include(CheckCXXCompilerFlag)
 CHECK_CXX_COMPILER_FLAG("-march=native" COMPILER_SUPPORTS_MARCH_NATIVE)
@@ -24,10 +24,10 @@ set(PUBLIC_SOURCES main.cpp
         headers/Channel.h
         sources/Dispatcher.cpp
         headers/Dispatcher.h
+        sources/DispatcherFactory.cpp
+        headers/DispatcherFactory.h
         sources/EventLoop.cpp
         headers/EventLoop.h
-        sources/EpollDispatcher.cpp
-        headers/EpollDispatcher.h
         sources/WorkerThread.cpp
         headers/WorkerThread.h
         sources/ThreadPool.cpp
@@ -43,15 +43,12 @@ set(PUBLIC_SOURCES main.cpp
         sources/TcpConnection.cpp
         headers/TcpConnection.h)
 
-#if(WIN32)
-#{
-#    list(APPEND SOURCES)
-#}
-#else
-#{
-#
-#}
-#endif
+if(WIN32)
+    list(APPEND PUBLIC_SOURCES sources/IocpDispatcher.cpp headers/IocpDispatcher.h)
+else()
+    list(APPEND PUBLIC_SOURCES sources/EpollDispatcher.cpp headers/EpollDispatcher.h)
+endif()
+
 add_executable(${PROJECT_NAME} ${PUBLIC_SOURCES})
 target_link_libraries(${PROJECT_NAME} PRIVATE spdlog::spdlog_header_only)
 if(WIN32)

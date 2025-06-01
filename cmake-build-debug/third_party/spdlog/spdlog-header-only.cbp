@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6"/>
+	<Project>
+		<Option title="spdlog-header-only"/>
+		<Option makefile_is_custom="1"/>
+		<Option compiler="gcc"/>
+		<Option virtualFolders="CMake Files\;CMake Files\third_party\;CMake Files\third_party\spdlog\;"/>
+		<Build>
+			<Target title="all">
+				<Option working_dir="/tmp/tmp.pCzmPfrlRM/cmake-build-debug/third_party/spdlog"/>
+				<Option type="4"/>
+				<MakeCommands>
+					<Build command="/usr/bin/gmake -j8 -f &quot;/tmp/tmp.pCzmPfrlRM/cmake-build-debug/third_party/spdlog/Makefile&quot;  VERBOSE=1 all"/>
+					<CompileFile command="/usr/bin/gmake -j8 -f &quot;/tmp/tmp.pCzmPfrlRM/cmake-build-debug/third_party/spdlog/Makefile&quot;  VERBOSE=1 &quot;$file&quot;"/>
+					<Clean command="/usr/bin/gmake -j8 -f &quot;/tmp/tmp.pCzmPfrlRM/cmake-build-debug/third_party/spdlog/Makefile&quot;  VERBOSE=1 clean"/>
+					<DistClean command="/usr/bin/gmake -j8 -f &quot;/tmp/tmp.pCzmPfrlRM/cmake-build-debug/third_party/spdlog/Makefile&quot;  VERBOSE=1 clean"/>
+				</MakeCommands>
+			</Target>
+		</Build>
+		<Unit filename="/tmp/tmp.pCzmPfrlRM/CMakeLists.txt">
+			<Option virtualFolder="CMake Files\"/>
+		</Unit>
+		<Unit filename="/tmp/tmp.pCzmPfrlRM/third_party/spdlog/CMakeLists.txt">
+			<Option virtualFolder="CMake Files\third_party\spdlog\"/>
+		</Unit>
+	</Project>
+</CodeBlocks_project_file>

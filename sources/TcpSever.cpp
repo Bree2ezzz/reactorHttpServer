@@ -14,10 +14,20 @@
 
 TcpSever::TcpSever(unsigned short port, int threadNum)
 {
+#ifdef _WIN32
+    // 初始化Winsock
+    WSADATA wsaData;
+    int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (result != 0) {
+        SPDLOG_ERROR("WSAStartup failed: {}", result);
+        exit(1);
+    }
+#endif
+
     port_ = port;
     threadNum_ = threadNum;
     auto loop = std::make_shared<EventLoop>();
-    mainLoop_ = loop;
+    mainLoop_ = loop;//主事件循环
     try{
         mainLoop_->init();
         mainLoop_->initWakeupChannel();
@@ -32,7 +42,21 @@ TcpSever::TcpSever(unsigned short port, int threadNum)
 
 int TcpSever::readCallback()
 {
+    //处理新连接的接受
     socket_t cfd = accept(lfd_,NULL,NULL);
+#ifdef _WIN32
+    if(cfd == INVALID_SOCKET)
+    {
+        SPDLOG_ERROR("accept failed: {}", WSAGetLastError());
+        return -1;
+    }
+#else
+    if(cfd == -1)
+    {
+        SPDLOG_ERROR("accept failed");
+        return -1;
+    }
+#endif
     std::shared_ptr<EventLoop> evLoop = threadPool_->takeWorkerEventLoop();
     std::shared_ptr<TcpConnection> conn = std::make_shared<TcpConnection>(cfd,evLoop);
     conn->init();
@@ -50,16 +74,25 @@ void TcpSever::run()
 void TcpSever::setListen()
 {
     lfd_ = socket(AF_INET,SOCK_STREAM,0);
+#ifdef _WIN32
+    if(lfd_ == INVALID_SOCKET)
+#else
     if(lfd_ == -1)
+#endif
     {
         std::cerr << "setListen-->socket error" << std::endl;
+        return;
     }
     //设置端口复用
     int opt = 1;
-    int ret = setSocketOption(lfd_,1,SO_REUSEADDR,&opt,sizeof(opt));
+    int ret = setSocketOption(lfd_,SOL_SOCKET,SO_REUSEADDR,&opt,sizeof(opt));
     if(ret == -1)
     {
         std::cerr << "setListen-->setSocketOpt error" << std::endl;
+#ifdef _WIN32
+        int error_code = WSAGetLastError(); // 获取具体的错误码
+        std::cerr << "setsockopt failed for sockfd " << error_code;
+#endif
         closeSocket(lfd_);
         return;
     }
@@ -86,11 +119,35 @@ void TcpSever::setListen()
 
 int TcpSever::setSocketOption(socket_t sockfd, int level, int optname, const void *optval, socklen_t optlen)
 {
+    // 检查是否是设置端口复用选项
+    if (level == SOL_SOCKET && optname == SO_REUSEADDR)
+    {
+        int ret;
 #ifdef _WIN32
-    return setsockopt(sockfd, level, optname, reinterpret_cast<const char*>(optval), static_cast<int>(optlen));
+        //据说SO_EXCLUSIVEADDRUSE更安全
+        ret = setsockopt(sockfd, SOL_SOCKET, SO_EXCLUSIVEADDRUSE, reinterpret_cast<const char*>(optval), static_cast<int>(optlen));
+        if (ret == SOCKET_ERROR) {
+            std::cerr << "Error setting SO_EXCLUSIVEADDRUSE on Windows: " << WSAGetLastError() << std::endl;
+        }
+        return ret;
 #else
-    return setsockopt(sockfd, level, optname, optval, optlen);
+        // 在 Linux/Unix 上，SO_REUSEADDR 行为符合预期，主要用于处理 TIME_WAIT 状态。
+        ret = setsockopt(sockfd, level, optname, optval, optlen);
+        if (ret == -1) {
+            perror("Error setting SO_REUSEADDR on Linux");
+        }
+        return ret;
 #endif
+    }
+    else
+    {
+        // 对于其他套接字选项，直接调用底层的 setsockopt
+#ifdef _WIN32
+        return setsockopt(sockfd, level, optname, reinterpret_cast<const char*>(optval), static_cast<int>(optlen));
+#else
+        return setsockopt(sockfd, level, optname, optval, optlen);
+#endif
+    }
 }
 
 void TcpSever::closeSocket(socket_t sockfd)
@@ -112,5 +169,15 @@ int TcpSever::bindSocket(socket_t sockfd, const sockaddr *addr, socklen_t addrle
     return bind(sockfd, addr, static_cast<int>(addrlen));
 #else
     return bind(sockfd, addr, addrlen);
+#endif
+}
+
+TcpSever::~TcpSever()
+{
+    closeSocket(lfd_);
+    
+#ifdef _WIN32
+    // 清理Winsock
+    WSACleanup();
 #endif
 }

@@ -26,6 +26,7 @@ public:
     EventLoop(const std::string& threadName);
     ~EventLoop() = default;
     void init();//初始化 主要是为了构造Dispatcher
+    //创建自己的socketpair，为了有新的需要检测是事件时让等待的函数直接返回
     bool createSocketPair(socket_t& readFd,socket_t& writeFD);
     int writeCallback() override;
     int readCallback() override;
@@ -40,7 +41,7 @@ public:
     int run();
     int eventActive(socket_t fd, int event);//处理激活的文件描述符
     std::thread::id getThreadId();
-
+    const std::map<socket_t,std::shared_ptr<Channel>>& getChannelMap() const { return channelMap_; }
 
 private:
     void taskWakeUp();

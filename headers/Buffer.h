@@ -36,6 +36,11 @@ public:
     {
         return readPos_;
     }
+    
+    // IOCP相关方法
+    int readData(socket_t fd);
+    void retrieve(int len);
+    void appendData(const char* data, int len);
 private:
     char* data_;
     int capacity_;

@@ -39,6 +39,9 @@ public:
     //发送数据
     static void sendDir(std::string dirName, std::shared_ptr<Buffer> sendBuf, socket_t cfd);
     static void sendFile(std::string fileName, std::shared_ptr<Buffer> sendBuf, socket_t cfd);
+    
+    //生成目录HTML内容
+    static std::string generateDirHTML(const std::string& dirName);
 private:
 //请求行数据
     std::string method_;

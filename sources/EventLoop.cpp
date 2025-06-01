@@ -5,9 +5,13 @@
 #include "../headers/EventLoop.h"
 
 #include "../headers/Dispatcher.h"
+#include "../headers/DispatcherFactory.h"
 #include <cassert>
-
+#ifdef _WIN32
+#include "../headers/IocpDispatcher.h"
+#else
 #include "../headers/EpollDispatcher.h"
+#endif
 #include <spdlog/spdlog.h>
 EventLoop::EventLoop() : EventLoop(std::string())
 {
@@ -26,7 +30,7 @@ void EventLoop::init()
 {
     try
     {
-        dispatcher_ = std::make_shared<EpollDispatcher>(shared_from_this());
+        dispatcher_ = DispatcherFactory::createDispatcher(shared_from_this());
     }
     catch(const std::exception& e)
     {
@@ -44,12 +48,22 @@ bool EventLoop::createSocketPair(socket_t &readFd, socket_t &writeFd)
     sockaddr_in addr{0};
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK); // 127.0.0.1
-    addr.sin_port = 0;//系统自动分配即可
+    addr.sin_port = 0;//系统自动分配端口
     if(bind(listener,reinterpret_cast<sockaddr*>(&addr),sizeof(addr)) < 0)
     {
         closesocket(listener);
         return false;
     }
+    
+    // 获取系统分配的端口号
+    int addrlen = sizeof(addr);
+    if(getsockname(listener, reinterpret_cast<sockaddr*>(&addr), &addrlen) < 0)
+    {
+    //这是是创建虚假的socket对，win下绑定端口为0是需要getsockname
+        closesocket(listener);
+        return false;
+    }
+    
     if(listen(listener,128) < 0)
     {
         closesocket(listener);
@@ -81,7 +95,7 @@ bool EventLoop::createSocketPair(socket_t &readFd, socket_t &writeFd)
 
 
 #else
-    // Linux平台
+    // Linux平台 socketpair函数 更方便的创建socket对
     socket_t mysocket[2];
     int ret = socketpair(AF_UNIX, SOCK_STREAM, 0, mysocket);
     if (ret == -1)
@@ -102,6 +116,7 @@ int EventLoop::writeCallback()
 
 int EventLoop::readCallback()
 {
+    //这里接受的是唤醒线程发来的一点点数据
     char buf[4]{0};
     recv(wakeupFdRead_,buf,sizeof(buf),0);
     return 0;
@@ -119,13 +134,13 @@ int EventLoop::addTask(std::shared_ptr<Channel> channel, ElemType type)
     if(threadId_ == std::this_thread::get_id())
     {
         //处理任务
-        SPDLOG_INFO("处理任务");
+        SPDLOG_INFO("process task");
         processTaskQ();
     }
     else
     {
         //主线程派发任务 需要唤醒线程
-        SPDLOG_INFO("主线程派发任务 需要唤醒线程");
+        SPDLOG_INFO("main thread assign tasks,need wake up child thread");
         taskWakeUp();
     }
     return 0;
@@ -146,7 +161,6 @@ void EventLoop::taskWakeUp()
 
 int EventLoop::processTaskQ()
 {
-    SPDLOG_INFO("begin processTaskQ");
     while(!taskQueue_.empty())
     {
         std::shared_ptr<ChannelElement> node;

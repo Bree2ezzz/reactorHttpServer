@@ -15,7 +15,7 @@ class TcpSever : public ChannelContextBase , public std::enable_shared_from_this
 
 public:
     TcpSever(unsigned short port,int threadNum);
-    ~TcpSever() = default;
+    ~TcpSever();
     int readCallback() override;//连接回调函数
     void run();//启动服务器
     void setListen();
