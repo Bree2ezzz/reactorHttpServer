@@ -299,7 +299,6 @@ bool HttpRequest::processRequest(std::shared_ptr<HttpResponse> response)
         auto fileSize = std::filesystem::file_size(filePath);
         response->addHeader("Content-type", "application/octet-stream"); // 强制所有文件都用二进制流处理，浏览器会下载
         response->addHeader("Content-length", std::to_string(fileSize));
-        // 添加Content-Disposition头，强制下载
         std::string filename = std::filesystem::path(file).filename().string();
         response->addHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
         response->sendDataFunc = sendFile;

@@ -155,7 +155,6 @@ void Buffer::removeOneLine()
         readPos_ = (crlf - data_) + 2;  // 跳过一行（含 \r\n）
     } else {
         // 若未找到换行，不做推进（防止越界）
-        // 可加日志帮助调试：
         SPDLOG_WARN("removeOneLine(): does not find \\r\\n,Skip one line error");
     }
 }

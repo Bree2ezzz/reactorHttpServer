@@ -19,7 +19,6 @@ public:
     {
         return capacity_ - writePos_;
     }
-    //得到可读容量
     inline int readableSize() const
     {
         return writePos_ - readPos_;

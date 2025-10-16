@@ -27,6 +27,7 @@ public:
     void init();
     int writeCallback() override;
     int readCallback() override;
+    void processHttpRequest();
     
 #ifdef _WIN32
     // IOCP相关方法

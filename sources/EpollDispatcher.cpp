@@ -94,6 +94,7 @@ int EpollDispatcher::epollCtl(int op)
     {
         events |= EPOLLOUT;
     }
+    events |= EPOLLET;  // 边缘触发
     ev.events = events;
     int ret = epoll_ctl(epfd_,op,channel_->getSocket(),&ev);
     return ret;

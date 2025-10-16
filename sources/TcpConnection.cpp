@@ -57,7 +57,29 @@ void TcpConnection::init()
 
 int TcpConnection::writeCallback()
 {
-    //使用和linux下同样的同步写操作，无需异步的writeCallback
+#ifdef _WIN32
+#else
+    socket_t socket = channel_->getSocket();
+    while (writeBuf_->readableSize() > 0) {
+        int sent = writeBuf_->sendData(socket);
+        if (sent <= 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // 缓冲区满，等待下次可写事件
+                break;
+            } else {
+                //错误，关闭连接
+                evLoop_->addTask(channel_, ElemType::ETDELETE);
+                return 0;
+            }
+        }
+    }
+
+    // 发送完成后关闭连接
+    if (writeBuf_->readableSize() == 0) {
+        evLoop_->addTask(channel_, ElemType::ETDELETE);
+    }
+#endif
+
     return 0;
 }
 
@@ -70,24 +92,28 @@ int TcpConnection::readCallback()
 #else
     // Linux下，使用传统的同步读取
     socket_t socket = channel_->getSocket();
-    int count = readBuf_->socketRead(socket);
-    if(count > 0)
+    //边缘触发。循环读取直到无数据
+    while(true)
     {
-        request_->reset();
-        response_->reset();
-        
-        bool flag = request_->parseRequest(readBuf_,response_,writeBuf_,socket);
-        if(!flag)
-        {
-            std::string errMsg = "Http/1.1 400 Bad Request\r\n\r\n";
-            // 统一使用同步发送
-            send(socket, errMsg.c_str(), errMsg.size(), 0);
+        int count = readBuf_->socketRead(socket);
+        if (count > 0) {
+            processHttpRequest();
+        } else if (count == 0) {
+            // 连接关闭
+            evLoop_->addTask(channel_, ElemType::ETDELETE);
+            break;
+        } else {
+            // EAGAIN，没有更多数据可读
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                break;
+            } else {
+                // 真正的错误，关闭连接
+                evLoop_->addTask(channel_, ElemType::ETDELETE);
+                break;
+            }
         }
     }
-    else
-    {
-        evLoop_->addTask(channel_,ElemType::ETDELETE);
-    }
+
 #endif
     return 0;
 }
@@ -150,3 +176,18 @@ void TcpConnection::onReadComplete(DWORD bytesTransferred)
     postRead();
 }
 #endif
+void TcpConnection::processHttpRequest()
+{
+    request_->reset();
+    response_->reset();
+    bool flag = request_->parseRequest(readBuf_,response_,writeBuf_,fd_);
+    if (!flag) {
+        std::string errMsg = "Http/1.1 400 Bad Request\r\n\r\n";
+        writeBuf_->appendString(errMsg.c_str());
+    }
+    //有数据写，启用写事件监听
+    if (writeBuf_->readableSize() > 0) {
+        channel_->writeEventEnable(true);
+        evLoop_->addTask(channel_, ElemType::ETMODIFY);
+    }
+}
