@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <string.h>
 #include <algorithm>
+#include <cerrno>
 
 Buffer::Buffer(int size) : capacity_(size),readPos_(0),writePos_(0)
 {
@@ -25,9 +26,35 @@ int Buffer::sendData(socket_t socket)
     {
 #ifdef _WIN32
         int count = send(socket, data_ + readPos_, readableSize(), 0);
+        if (count == SOCKET_ERROR)
+        {
+            int err = WSAGetLastError();
+            if (err == WSAEWOULDBLOCK)
+            {
+                WSASetLastError(err);
+                return -1;
+            }
+            if (err == WSAEINTR)
+            {
+                WSASetLastError(err);
+                return -1;
+            }
+            SPDLOG_ERROR("send data error: {}", err);
+            WSASetLastError(err);
+            return -1;
+        }
 #else
         // 发送数据，使用MSG_NOSIGNAL避免SIGPIPE信号
         int count = send(socket, data_ + readPos_, readableSize(), MSG_NOSIGNAL);
+        if (count < 0)
+        {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+            {
+                return -1;
+            }
+            SPDLOG_ERROR("send data error: {}", strerror(errno));
+            return -1;
+        }
 #endif
         if(count > 0)
         {
@@ -185,5 +212,4 @@ void Buffer::appendData(const char* data, int len)
 {
     appendString(data, len);
 }
-
 

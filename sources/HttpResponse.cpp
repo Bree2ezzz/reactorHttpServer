@@ -31,8 +31,18 @@ void HttpResponse::prepareMsg(std::shared_ptr<Buffer> sendBuf, socket_t socket)
         sendBuf->appendString(tmp);
     }
     sendBuf->appendString("\r\n");
+#ifdef _WIN32
+    // Windows路径保持原有同步发送行为
     sendBuf->sendData(socket);
-    sendDataFunc(fileName_.c_str(),sendBuf,socket);
+    if (sendDataFunc) {
+        sendDataFunc(fileName_.c_str(), sendBuf, socket);
+    }
+#else
+    if (bodyType_ == ResponseBodyType::Memory) {
+        sendBuf->appendString(bodyContent_.data(), static_cast<int>(bodyContent_.size()));
+    }
+    (void)socket;
+#endif
 }
 
 void HttpResponse::reset()
@@ -40,6 +50,26 @@ void HttpResponse::reset()
     statusCode_ = StatusCode::Unknown;
     headers_.clear();
     fileName_.clear();
+#ifdef _WIN32
     sendDataFunc = nullptr;
+#endif
+    bodyContent_.clear();
+    fileSize_ = 0;
+    bodyType_ = ResponseBodyType::None;
+    shouldClose_ = true;
 }
 
+void HttpResponse::setBodyContent(const std::string& body)
+{
+    bodyContent_ = body;
+    bodyType_ = ResponseBodyType::Memory;
+    fileSize_ = body.size();
+}
+
+void HttpResponse::setFileBody(const std::string& filePath, std::size_t fileSize)
+{
+    fileName_ = filePath;
+    fileSize_ = fileSize;
+    bodyType_ = ResponseBodyType::File;
+    bodyContent_.clear();
+}

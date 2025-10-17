@@ -191,6 +191,7 @@ bool HttpRequest::parseRequest(std::shared_ptr<Buffer> readBuf, std::shared_ptr<
 
 bool HttpRequest::processRequest(std::shared_ptr<HttpResponse> response)
 {
+    response->setShouldClose(true);
     if(method_ != "GET")
     {
         return false;
@@ -233,7 +234,9 @@ bool HttpRequest::processRequest(std::shared_ptr<HttpResponse> response)
             response->setFileName("404.html");
             response->setStatuCode(StatusCode::NotFound);
             response->addHeader("Content-type", getFileType(".html"));
+#ifdef _WIN32
             response->sendDataFunc = sendFile;
+#endif
             return true;
         }
     }
@@ -267,10 +270,27 @@ bool HttpRequest::processRequest(std::shared_ptr<HttpResponse> response)
         
         if (!exists) {
             // 文件不存在 -- 回复404
-            response->setFileName("404.html");
+            response->addHeader("Connection", "close");
             response->setStatuCode(StatusCode::NotFound);
+#ifdef _WIN32
+            response->setFileName("404.html");
             response->addHeader("Content-type", getFileType(".html"));
             response->sendDataFunc = sendFile;
+#else
+            std::filesystem::path notFoundPath("404.html");
+            if (std::filesystem::exists(notFoundPath)) {
+                auto notFoundSize = std::filesystem::file_size(notFoundPath);
+                response->setFileBody(notFoundPath.string(), static_cast<std::size_t>(notFoundSize));
+                response->addHeader("Content-type", getFileType(".html"));
+                response->addHeader("Content-length", std::to_string(notFoundSize));
+            } else {
+                static const std::string kDefaultNotFound =
+                    "<html><body><h1>404 Not Found</h1></body></html>";
+                response->addHeader("Content-type", "text/html");
+                response->addHeader("Content-length", std::to_string(kDefaultNotFound.size()));
+                response->setBodyContent(kDefaultNotFound);
+            }
+#endif
             SPDLOG_WARN("file does not exist: {}", file);
             return true;
         }
@@ -290,7 +310,11 @@ bool HttpRequest::processRequest(std::shared_ptr<HttpResponse> response)
             response->addHeader("Content-type", getFileType(".html"));
             response->addHeader("Content-Length", std::to_string(htmlContent.length()));
             response->addHeader("Connection", "close");
+#ifdef _WIN32
             response->sendDataFunc = sendDir;
+#else
+            response->setBodyContent(htmlContent);
+#endif
             return true;
         }
 
@@ -301,7 +325,12 @@ bool HttpRequest::processRequest(std::shared_ptr<HttpResponse> response)
         response->addHeader("Content-length", std::to_string(fileSize));
         std::string filename = std::filesystem::path(file).filename().string();
         response->addHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
+        response->addHeader("Connection", "close");
+#ifdef _WIN32
         response->sendDataFunc = sendFile;
+#else
+        response->setFileBody(file, static_cast<std::size_t>(fileSize));
+#endif
         return true;
 
     } catch (const std::filesystem::filesystem_error& e) {

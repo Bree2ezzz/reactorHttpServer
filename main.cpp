@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
     _chdir("D:\\wangyeceshi");
 #else
     // Linux平台下的工作目录设置
-    chdir("/home/roxy/wangyeceshi");
+    chdir("/home/breeze/wangyeceshi");
 #endif
     
     std::shared_ptr<TcpSever> server = std::make_shared<TcpSever>(port, 4);

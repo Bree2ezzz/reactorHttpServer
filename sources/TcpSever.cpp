@@ -10,6 +10,9 @@
 #else
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
+#include <cerrno>
+#include <cstring>
 #endif
 
 TcpSever::TcpSever(unsigned short port, int threadNum)
@@ -55,6 +58,15 @@ int TcpSever::readCallback()
     {
         SPDLOG_ERROR("accept failed");
         return -1;
+    }
+    int flags = fcntl(cfd, F_GETFL, 0);
+    if (flags == -1)
+    {
+        SPDLOG_WARN("fcntl F_GETFL failed for fd {}: {}", cfd, strerror(errno));
+    }
+    else if (fcntl(cfd, F_SETFL, flags | O_NONBLOCK) == -1)
+    {
+        SPDLOG_WARN("fcntl F_SETFL failed for fd {}: {}", cfd, strerror(errno));
     }
 #endif
     std::shared_ptr<EventLoop> evLoop = threadPool_->takeWorkerEventLoop();

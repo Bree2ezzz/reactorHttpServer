@@ -44,6 +44,13 @@ private:
     std::shared_ptr<HttpRequest> request_;
     std::shared_ptr<HttpResponse> response_;
     socket_t fd_;
+    bool closeAfterWrite_{true};
+#ifndef _WIN32
+    bool hasFileBody_{false};
+    int fileFd_{-1};
+    off_t fileOffset_{0};
+    std::size_t fileSize_{0};
+#endif
     
 #ifdef _WIN32
     // IOCP相关成员

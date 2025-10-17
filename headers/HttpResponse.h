@@ -9,6 +9,7 @@
 #include <map>
 #include <functional>
 #include <string>
+#include <cstddef>
 enum class StatusCode
 {
     Unknown,
@@ -19,9 +20,22 @@ enum class StatusCode
     NotFound = 404
 };
 
+#ifdef _WIN32
+using SendDataFunc = std::function<void(const char*,std::shared_ptr<Buffer>,socket_t)>;
+#endif
+
+enum class ResponseBodyType
+{
+    None,
+    Memory,
+    File
+};
+
 class HttpResponse {
 public:
-    std::function<void(const char*,std::shared_ptr<Buffer>,socket_t)> sendDataFunc;
+#ifdef _WIN32
+    SendDataFunc sendDataFunc;
+#endif
     HttpResponse();
     ~HttpResponse() = default;
     void addHeader(const std::string key,const std::string value);
@@ -36,6 +50,14 @@ public:
         statusCode_ = code;
 
     }
+    void setBodyContent(const std::string& body);
+    void setFileBody(const std::string& filePath, std::size_t fileSize);
+    void setShouldClose(bool flag) { shouldClose_ = flag; }
+    bool shouldClose() const { return shouldClose_; }
+    ResponseBodyType bodyType() const { return bodyType_; }
+    const std::string& bodyContent() const { return bodyContent_; }
+    std::size_t fileSize() const { return fileSize_; }
+    const std::string& getFileName() const { return fileName_; }
 
 private:
     //状态码
@@ -51,6 +73,10 @@ private:
         {404, "Not Found"}
     };
     std::string fileName_{};
+    std::string bodyContent_{};
+    std::size_t fileSize_{0};
+    ResponseBodyType bodyType_{ResponseBodyType::None};
+    bool shouldClose_{true};
 
 };
 

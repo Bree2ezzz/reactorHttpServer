@@ -7,6 +7,12 @@
 
 #ifdef _WIN32
 #include "../headers/IocpDispatcher.h"
+#else
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/sendfile.h>
+#include <cerrno>
+#include <cstring>
 #endif
 
 TcpConnection::TcpConnection(socket_t fd, std::shared_ptr<EventLoop> evLoop)
@@ -18,6 +24,13 @@ TcpConnection::TcpConnection(socket_t fd, std::shared_ptr<EventLoop> evLoop)
     response_ = std::make_shared<HttpResponse>();
     name_ = "Connection-" + std::to_string(fd);
     fd_ = fd;
+    closeAfterWrite_ = true;
+#ifndef _WIN32
+    hasFileBody_ = false;
+    fileFd_ = -1;
+    fileOffset_ = 0;
+    fileSize_ = 0;
+#endif
     
 #ifdef _WIN32
     // 初始化IOCP重叠结构
@@ -31,8 +44,14 @@ TcpConnection::TcpConnection(socket_t fd, std::shared_ptr<EventLoop> evLoop)
 #endif
 }
 
+
 TcpConnection::~TcpConnection()
 {
+#ifndef _WIN32
+    if (fileFd_ >= 0) {
+        close(fileFd_);
+    }
+#endif
 #ifdef _WIN32
     if (fd_ != INVALID_SOCKET) {
         closesocket(fd_);
@@ -62,21 +81,61 @@ int TcpConnection::writeCallback()
     socket_t socket = channel_->getSocket();
     while (writeBuf_->readableSize() > 0) {
         int sent = writeBuf_->sendData(socket);
-        if (sent <= 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                // 缓冲区满，等待下次可写事件
-                break;
-            } else {
-                //错误，关闭连接
-                evLoop_->addTask(channel_, ElemType::ETDELETE);
-                return 0;
-            }
+        if (sent > 0) {
+            continue;
+        }
+        if (sent == 0) {
+            break;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            break;
+        }
+        SPDLOG_ERROR("writeCallback send header/body buffer error: {}", strerror(errno));
+        evLoop_->addTask(channel_, ElemType::ETDELETE);
+        return 0;
+    }
+
+    while (writeBuf_->readableSize() == 0 && hasFileBody_ && fileOffset_ < static_cast<off_t>(fileSize_)) {
+        ssize_t sent = sendfile(socket, fileFd_, &fileOffset_, fileSize_ - fileOffset_);
+        if (sent > 0) {
+            continue;
+        }
+        if (sent == 0) {
+            break;
+        }
+        if (errno == EINTR) {
+            continue;
+        }
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            break;
+        }
+        SPDLOG_ERROR("writeCallback sendfile error: {}", strerror(errno));
+        hasFileBody_ = false;
+        if (fileFd_ >= 0) {
+            close(fileFd_);
+            fileFd_ = -1;
+        }
+        evLoop_->addTask(channel_, ElemType::ETDELETE);
+        return 0;
+    }
+
+    if (hasFileBody_ && fileOffset_ >= static_cast<off_t>(fileSize_)) {
+        hasFileBody_ = false;
+        if (fileFd_ >= 0) {
+            close(fileFd_);
+            fileFd_ = -1;
         }
     }
 
-    // 发送完成后关闭连接
-    if (writeBuf_->readableSize() == 0) {
-        evLoop_->addTask(channel_, ElemType::ETDELETE);
+    if (writeBuf_->readableSize() == 0 && !hasFileBody_) {
+        channel_->writeEventEnable(false);
+        evLoop_->addTask(channel_, ElemType::ETMODIFY);
+        if (closeAfterWrite_) {
+            evLoop_->addTask(channel_, ElemType::ETDELETE);
+        }
     }
 #endif
 
@@ -180,13 +239,48 @@ void TcpConnection::processHttpRequest()
 {
     request_->reset();
     response_->reset();
+#ifndef _WIN32
+    if (fileFd_ >= 0) {
+        close(fileFd_);
+        fileFd_ = -1;
+    }
+    hasFileBody_ = false;
+    fileOffset_ = 0;
+    fileSize_ = 0;
+#endif
+    closeAfterWrite_ = true;
     bool flag = request_->parseRequest(readBuf_,response_,writeBuf_,fd_);
     if (!flag) {
         std::string errMsg = "Http/1.1 400 Bad Request\r\n\r\n";
         writeBuf_->appendString(errMsg.c_str());
+        closeAfterWrite_ = true;
     }
+#ifndef _WIN32
+    if (flag) {
+        closeAfterWrite_ = response_->shouldClose();
+        if (response_->bodyType() == ResponseBodyType::File) {
+            hasFileBody_ = true;
+            fileSize_ = response_->fileSize();
+            fileOffset_ = 0;
+            fileFd_ = open(response_->getFileName().c_str(), O_RDONLY);
+            if (fileFd_ == -1) {
+                SPDLOG_ERROR("open file failed: {}", strerror(errno));
+                hasFileBody_ = false;
+                std::string err = "HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\r\n";
+                writeBuf_->appendString(err.c_str());
+                closeAfterWrite_ = true;
+            }
+        }
+    }
+#else
+    (void)flag;
+#endif
     //有数据写，启用写事件监听
-    if (writeBuf_->readableSize() > 0) {
+    if (writeBuf_->readableSize() > 0
+#ifndef _WIN32
+        || hasFileBody_
+#endif
+    ) {
         channel_->writeEventEnable(true);
         evLoop_->addTask(channel_, ElemType::ETMODIFY);
     }
