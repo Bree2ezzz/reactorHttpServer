@@ -34,5 +34,5 @@ int Channel::getEvents() const
 
 std::shared_ptr<ChannelContextBase> Channel::getContext()
 {
-    return context_;
+    return context_.lock();
 }

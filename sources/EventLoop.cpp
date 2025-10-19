@@ -207,12 +207,15 @@ int EventLoop::addToMap(std::shared_ptr<Channel> channel)
 int EventLoop::deleteFromMap(std::shared_ptr<Channel> channel)
 {
     socket_t fd = channel->getSocket();
-    if(channelMap_.find(fd) == channelMap_.end())
+    auto it = channelMap_.find(fd);
+    if(it == channelMap_.end())
     {
         return -1;
     }
-    dispatcher_->setChannel(channel);
-    return dispatcher_->remove();
+    dispatcher_->setChannel(it->second);
+    int ret = dispatcher_->remove();
+    channelMap_.erase(it);
+    return ret;
 }
 
 int EventLoop::modifyMap(std::shared_ptr<Channel> channel)
@@ -247,15 +250,27 @@ int EventLoop::eventActive(socket_t fd, int event)
     {
         return -1;
     }
-    std::shared_ptr<Channel> channel = channelMap_[fd];
+    auto it = channelMap_.find(fd);
+    if (it == channelMap_.end())
+    {
+        SPDLOG_WARN("eventActive: channel for fd {} not found", fd);
+        return -1;
+    }
+    std::shared_ptr<Channel> channel = it->second;
     assert(channel->getSocket() == fd);
+    auto ctx = channel->getContext();
+    if (!ctx)
+    {
+        SPDLOG_WARN("eventActive: context expired for fd {}", fd);
+        return -1;
+    }
     if (event & (int)FDEvent::ReadEvent)
     {
-        channel->getContext()->readCallback();
+        ctx->readCallback();
     }
     if (event & (int)FDEvent::WriteEvent)
     {
-        channel->getContext()->writeCallback();
+        ctx->writeCallback();
     }
     return 0;
 }

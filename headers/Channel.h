@@ -41,7 +41,8 @@ class Channel {
 
 public:
     ~Channel() = default;
-    explicit Channel(socket_t fd,FDEvent events,std::shared_ptr<ChannelContextBase> ctx) : fd_(fd),events_(static_cast<int>(events)),context_(ctx){}
+    explicit Channel(socket_t fd,FDEvent events,std::shared_ptr<ChannelContextBase> ctx)
+        : fd_(fd),events_(static_cast<int>(events)),context_(ctx){}
     void writeEventEnable(bool flag);
     [[nodiscard]] bool isWriteEventEnable() const;
     socket_t getSocket() const;
@@ -53,7 +54,7 @@ private:
     socket_t fd_;//文件描述符
     //读写可以都发生，0x02是第二位1，0x04是第三位1，用按位操作来判断而不是枚举
     int events_;//处理时间描述
-    std::shared_ptr<ChannelContextBase> context_;
+    std::weak_ptr<ChannelContextBase> context_;
 
 };
 
