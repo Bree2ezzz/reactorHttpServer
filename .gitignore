@@ -3,3 +3,4 @@ build/
 .vscode/
 cmake-build-debug/
 AGENTS.md
+ASYNC_RESPONSE_FLOW.md
